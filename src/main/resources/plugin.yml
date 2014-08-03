@@ -1,9 +1,15 @@
 name: OpenPGM
-main: io.github.Aaron1011.openpgm.OpenPGM
+main: io.github.Aaron1011.OpenPGM.OpenPGM
 version: 1.0.0
 
 commands:
     loadworld:
+        description: Load the specified world
+        usage:  /loadworld <world>
+        permission: OpenPGM.loadWorld
+        permission-message: You don't have permission to use /loadworld
+        
+    tutorial:
         description: Load the specified world
         usage:  /loadworld <world>
         permission: OpenPGM.loadWorld
