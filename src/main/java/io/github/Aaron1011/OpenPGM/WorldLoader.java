@@ -6,6 +6,7 @@ import io.github.Aaron1011.OpenPGM.tutorial.TutorialStage;
 import java.io.File;
 import java.io.IOException;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
@@ -23,7 +24,19 @@ public class WorldLoader {
 		PGMWorld world = new PGMWorld();
 		
 		String xmlName = name + ".xml";
-		File xmlFile = new File(xmlName);
+
+		Document doc = openXML(xmlName);
+		
+		Element rootNode = doc.getRootElement();
+		Bukkit.broadcastMessage("Root element :" + rootNode.getName());
+		
+		parseDocument(rootNode, world, false);
+		
+		return world;
+	}
+	
+	private static Document openXML(String file) {
+		File xmlFile = new File(file);
 		SAXBuilder builder = new SAXBuilder();
 		Document doc;
 		try {
@@ -35,86 +48,114 @@ public class WorldLoader {
 			e.printStackTrace();
 			return null;
 		}
-		
-		Element rootNode = doc.getRootElement();
-		Bukkit.broadcastMessage("Root element :" + rootNode.getName());
-		
-		parseDocument(rootNode, world);
-		
-		return world;
+		return doc;
 	}
 
-	private static void parseDocument(Element rootNode, PGMWorld world) {
-		String proto = rootNode.getAttributeValue("proto");
-		if (!proto.equals("1.3.3")) {
-			Bukkit.broadcastMessage("Wrong version - expected 1.3.3, got " + proto);
-		}
-		String map_name = rootNode.getChildText("name");
-		String version = rootNode.getChildText("version");
-		String objective = rootNode.getChildText("objective");
-		
-		world.setName(map_name);
-		world.setVersion(version);
-		world.setObjective(objective);
-		
-		Bukkit.broadcastMessage("Name: " + map_name);
-		Bukkit.broadcastMessage("Version: " + version);
-		Bukkit.broadcastMessage("Objective: " + objective);
-		
-		List<Element> authors = rootNode.getChild("authors").getChildren();
-		
-		Bukkit.broadcastMessage("\nAuthors:");
-		
-		for (Element author: authors) {
-			String name = author.getText();
-			String contribution = author.getAttributeValue("contribution");
-			if (contribution == null) {
-				contribution = "";
+	private static void parseDocument(Element rootNode, PGMWorld world, boolean include) { 
+		if (!include) {
+			String proto = rootNode.getAttributeValue("proto");
+			if (proto != null && !proto.equals("1.3.3")) {
+				Bukkit.broadcastMessage("Wrong version - expected 1.3.3, got " + proto);
 			}
-			
-			world.addAuthor(new Author(name, contribution));
-			
-			Bukkit.broadcastMessage("Author: " + name + "\nContribution: " + contribution + "\n");
-		}
+			String map_name = rootNode.getChildText("name");
+			String version = rootNode.getChildText("version");
+			String objective = rootNode.getChildText("objective");
 		
+			world.setName(map_name);
+			world.setVersion(version);
+			world.setObjective(objective);
+		
+			Bukkit.broadcastMessage("Name: " + map_name);
+			Bukkit.broadcastMessage("Version: " + version);
+			Bukkit.broadcastMessage("Objective: " + objective);
+		
+			List<Element> authors = rootNode.getChild("authors").getChildren();
+		
+			Bukkit.broadcastMessage("\nAuthors:");
+		
+			for (Element author: authors) {
+				String name = author.getText();
+				String contribution = author.getAttributeValue("contribution");
+				if (contribution == null) {
+					contribution = "";
+				}
+			
+				world.addAuthor(new Author(name, contribution));
+			
+				Bukkit.broadcastMessage("Author: " + name + "\nContribution: " + contribution + "\n");
+			}
+		}	
 		parseTutorial(rootNode, world);
+		parseIncludes(rootNode, world);
+			
 
+	}
+
+	private static void parseIncludes(Element rootNode, PGMWorld world) {
+		List<Element> includes = rootNode.getChildren("include");
+		for (Element f: includes) {
+			Document doc = openXML(f.getAttributeValue("src"));
+			parseDocument(doc.getRootElement(), world, true); // Recursively parse
+		}
 	}
 
 	private static void parseTutorial(Element rootNode, PGMWorld world) {
 		Element tutorial = rootNode.getChild("tutorial");
+		List<TutorialStage> suffix = new ArrayList<TutorialStage>();
 		if (tutorial != null) {
-			for (Element stage: tutorial.getChildren()) {
-				String title = stage.getAttributeValue("title");
-				Bukkit.broadcastMessage("Tutorial stage: " + title);
-				Bukkit.broadcastMessage("Lines: ");
-				TutorialStage section = new TutorialStage(title);
-				for (Element line: stage.getChild("message").getChildren("line")) {
-					Bukkit.broadcastMessage(line.getText());
-					section.addLine(Util.format(line.getText()));
+			for (Element e: tutorial.getChildren()) {
+				if (e.getName().equals("prefix")) {
+					TutorialStage stage = parseTutorialStage(e.getChild("stage"), world);
+					world.addStageAt(stage, 0);
 				}
-				
-				Location location = new Location(Bukkit.getServer().getWorlds().get(0), 0, 0, 0);;
-				Element teleport = stage.getChild("teleport").getChild("point");
-				try {
-					location.setYaw(teleport.getAttribute("yaw").getIntValue());
-					location.setPitch(teleport.getAttribute("pitch").getIntValue());
-				} catch (DataConversionException e) {
-					e.printStackTrace();
-					Bukkit.getLogger().severe("Invalid PGM XML data - invalid numeric value for pitch and yaw");
-					return;
+				if (e.getName().equals("suffix")) {
+					world.addStage(parseTutorialStage(e.getChild("stage"), world));
 				}
-				
-				String[] pos = teleport.getValue().split(",");
-				
-				location.setX(Double.parseDouble(pos[0]));
-				location.setY(Double.parseDouble(pos[1]));
-				location.setZ(Double.parseDouble(pos[2]));
-				
-				section.location = location;
-				
-				world.addStage(section);
+				else if (e.getName().equals("stage")) {
+					suffix.add(parseTutorialStage(e, world));
+				}
 			}
 		}
+		for (TutorialStage s: suffix) {
+			world.addStage(s);
+		}
+	}
+	
+	private static TutorialStage parseTutorialStage(Element stage, PGMWorld world) {
+		String title = stage.getAttributeValue("title");
+		Bukkit.broadcastMessage("Tutorial stage: " + title);
+		Bukkit.broadcastMessage("Lines: ");
+		TutorialStage section = new TutorialStage(title);
+		for (Element line: stage.getChild("message").getChildren("line")) {
+			Bukkit.broadcastMessage(line.getText());
+			section.addLine(Util.format(line.getText()));
+		}
+				
+		Location location = new Location(Bukkit.getServer().getWorlds().get(0), 0, 0, 0);
+		if (stage.getChild("teleport") != null) {
+			Element teleport = stage.getChild("teleport").getChild("point");
+			try {
+				location.setYaw(teleport.getAttribute("yaw").getIntValue());
+				location.setPitch(teleport.getAttribute("pitch").getIntValue());
+			} catch (DataConversionException e) {
+				e.printStackTrace();
+				Bukkit.getLogger().severe("Invalid PGM XML data - invalid numeric value for pitch and yaw");					
+				return null;
+			}
+					
+			String[] pos = teleport.getValue().split(",");
+				
+			location.setX(Double.parseDouble(pos[0]));
+			location.setY(Double.parseDouble(pos[1]));
+			location.setZ(Double.parseDouble(pos[2]));
+					
+			section.location = location;
+		}
+		else {
+			section.location = null;
+		}
+			
+		return section;
 	}
 }
+

@@ -33,7 +33,7 @@ public class OpenPGM extends JavaPlugin {
 						return false;
 					}
 					
-					if (sender instanceof Player) {
+					if (sender instanceof Player && stage.location != null) {
 						((Player) sender).teleport(stage.location);
 					}
 					

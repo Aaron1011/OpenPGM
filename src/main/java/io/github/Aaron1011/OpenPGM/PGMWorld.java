@@ -70,4 +70,8 @@ public class PGMWorld {
 	public void addStage(TutorialStage section) {
 		this.tutorial.addStage(section);
 	}
+	
+	public void addStageAt(TutorialStage section, int index) {
+		this.tutorial.addStageAt(section, index);
+	}
 }

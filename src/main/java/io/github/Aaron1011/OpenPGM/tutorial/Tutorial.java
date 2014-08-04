@@ -23,6 +23,10 @@ public class Tutorial {
 		this.stages.add(stage);
 	}
 	
+	public void addStageAt(TutorialStage stage, int index) {
+		this.stages.add(index, stage);
+	}
+	
 	public TutorialStage nextStage() {
 		if (index == this.stages.size() - 1) {
 			return this.stages.get(index);
